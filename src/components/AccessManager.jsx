@@ -93,9 +93,9 @@ export default function AccessManager({ accessToken, currentUserId }) {
   }
 
   async function resetPassword(user) {
-    const nextPassword = window.prompt(`Nova senha temporária para ${user.display_name} (mínimo 12 caracteres):`);
+    const nextPassword = window.prompt(`Nova senha temporária para ${user.display_name} (mínimo 8 caracteres):`);
     if (nextPassword === null) return;
-    if (nextPassword.length < 12) { setError('A senha temporária deve ter pelo menos 12 caracteres.'); return; }
+    if (nextPassword.length < 8) { setError('A senha temporária deve ter pelo menos 8 caracteres.'); return; }
     setBusy(true); setError(''); setNotice('');
     try {
       await callUsersApi(accessToken, 'PATCH', { user_id: user.user_id, password: nextPassword });
@@ -140,7 +140,7 @@ export default function AccessManager({ accessToken, currentUserId }) {
           <label className="form-label">Nome do professor<input autoComplete="off" maxLength={80} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Ex.: Nome Sobrenome" required /></label>
           <label className="form-label">Nome de usuário<input autoComplete="off" autoCapitalize="none" spellCheck="false" maxLength={32} value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Ex.: nome.sobrenome" required /><small>3–32 caracteres: letras sem acento, números, ponto, hífen ou sublinhado.</small></label>
           <label className="form-label">Papel<select value={role} onChange={(event) => setRole(event.target.value)}>{ROLE_OPTIONS.map((item) => <option key={item} value={item}>{ROLE_LABEL[item]}</option>)}</select></label>
-          <label className="form-label">Senha temporária<input autoComplete="new-password" minLength={12} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Pelo menos 12 caracteres" required /></label>
+          <label className="form-label">Senha temporária<input autoComplete="new-password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Pelo menos 8 caracteres" required /></label>
           <button type="button" className="password-generate" onClick={() => setPassword(generatePassword())}><KeyRound size={14} />Gerar senha forte</button>
           <button className="button button-primary access-create-button" type="submit" disabled={busy}><Plus size={16} />{busy ? 'Salvando…' : 'Criar acesso'}</button>
         </form>

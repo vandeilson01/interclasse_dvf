@@ -479,14 +479,14 @@ function PasswordForm({ onSave, onCancel }) {
   const [busy, setBusy] = useState(false);
   async function submit(event) {
     event.preventDefault(); setError('');
-    if (password.length < 12) { setError('Use pelo menos 12 caracteres.'); return; }
+    if (password.length < 8) { setError('Use pelo menos 8 caracteres.'); return; }
     if (password !== confirmation) { setError('As senhas não coincidem.'); return; }
     setBusy(true);
     try { await onSave(password); }
     catch (saveError) { setError(saveError?.message || 'Não foi possível atualizar a senha.'); }
     finally { setBusy(false); }
   }
-  return <form className="form-body" onSubmit={submit}><p className="auth-card-description">Escolha uma senha forte e não a compartilhe. O administrador pode redefini-la se necessário.</p><label className="form-label">Nova senha<input autoFocus type="password" autoComplete="new-password" minLength={12} value={password} onChange={(event) => setPassword(event.target.value)} required /></label><label className="form-label">Confirme a nova senha<input type="password" autoComplete="new-password" minLength={12} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} required /></label>{error && <div className="form-error" role="alert">{error}</div>}<div className="modal-actions"><button type="button" className="button button-quiet" onClick={onCancel}>Cancelar</button><button className="button button-primary" type="submit" disabled={busy}><KeyRound size={15} />{busy ? 'Atualizando…' : 'Atualizar senha'}</button></div></form>;
+  return <form className="form-body" onSubmit={submit}><p className="auth-card-description">Escolha uma senha forte e não a compartilhe. O administrador pode redefini-la se necessário.</p><label className="form-label">Nova senha<input autoFocus type="password" autoComplete="new-password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></label><label className="form-label">Confirme a nova senha<input type="password" autoComplete="new-password" minLength={8} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} required /></label>{error && <div className="form-error" role="alert">{error}</div>}<div className="modal-actions"><button type="button" className="button button-quiet" onClick={onCancel}>Cancelar</button><button className="button button-primary" type="submit" disabled={busy}><KeyRound size={15} />{busy ? 'Atualizando…' : 'Atualizar senha'}</button></div></form>;
 }
 
 export default App;

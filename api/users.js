@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { validateUsername, usernameToAuthEmail } from '../src/lib/usernames.js';
 
 const ALLOWED_ROLES = new Set(['admin', 'organizer', 'scorekeeper']);
-const MIN_PASSWORD_LENGTH = 12;
+const MIN_PASSWORD_LENGTH = 8;
 
 function respond(res, status, body) {
   res.setHeader('Cache-Control', 'no-store');
