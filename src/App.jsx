@@ -11,6 +11,7 @@ import { drawTournament, recordResult } from './lib/tournament.js';
 import { useAccess } from './lib/accessContext.jsx';
 import { changeOwnPassword } from './lib/auth.js';
 import AccessManager from './components/AccessManager.jsx';
+import StudentRegistrationManager from './components/StudentRegistrationManager.jsx';
 
 const SPORT_LABEL = { futsal: 'Futsal', volei: 'Vôlei' };
 const NAV_ITEMS = [
@@ -232,7 +233,7 @@ function App({ data, setData, profile, session, saveStatus, saveError, onRetrySa
         {saveStatus === 'error' && <div className="sync-warning" role="alert"><span>{saveError || 'O último salvamento não foi confirmado.'}</span><button onClick={onRetrySave}>Tentar salvar novamente</button><button onClick={() => { if (window.confirm('Recarregar descarta alterações locais ainda não sincronizadas. Exporte um JSON antes, se quiser preservá-las. Continuar?')) onReloadData(); }}>Recarregar banco</button></div>}
         <section className="page-content">
           {page === 'inicio' && <><Dashboard data={data} onNavigate={goTo} /><ProjectCourseBand students={data.students} /></>}
-          {page === 'alunos' && <StudentsPage data={data} search={search} setSearch={setSearch} canManage={access.canManageRoster} onAdd={() => setModal({ type: 'student' })} onEdit={(student) => setModal({ type: 'student', item: student })} onDelete={removeStudent} />}
+          {page === 'alunos' && <StudentsPage data={data} search={search} setSearch={setSearch} canManage={access.canManageRoster} accessToken={session.access_token} saveStatus={saveStatus} onReloadData={onReloadData} onAdd={() => setModal({ type: 'student' })} onEdit={(student) => setModal({ type: 'student', item: student })} onDelete={removeStudent} />}
           {page === 'equipes' && <TeamsPage data={data} sport={sport} setSport={setSport} teams={teamsBySport} canManage={access.canManageRoster} onAdd={() => setModal({ type: 'team' })} onEdit={(team) => setModal({ type: 'team', item: team })} onDelete={removeTeam} />}
           {page === 'chaves' && <BracketPage data={data} sport={sport} setSport={setSport} teams={teamsBySport} competition={activeCompetition} canDraw={access.canManageDraw} canEditScores={access.canEditScores} canEnterPendingScores={access.canEnterPendingScores} onDraw={createDraw} onReset={resetDraw} onScore={(match) => setModal({ type: 'score', item: match })} />}
           {page === 'jogos' && <GamesPage data={data} sport={sport} setSport={setSport} competition={activeCompetition} canEditScores={access.canEditScores} canEnterPendingScores={access.canEnterPendingScores} onScore={(match) => setModal({ type: 'score', item: match })} />}
@@ -314,12 +315,13 @@ function SportTabs({ sport, setSport }) {
   return <div className="sport-tabs" role="tablist" aria-label="Modalidade"><button role="tab" aria-selected={sport === 'futsal'} className={sport === 'futsal' ? 'selected' : ''} onClick={() => setSport('futsal')}><Footprints size={15} />Futsal</button><button role="tab" aria-selected={sport === 'volei'} className={sport === 'volei' ? 'selected' : ''} onClick={() => setSport('volei')}><Volleyball size={15} />Vôlei</button></div>;
 }
 
-function StudentsPage({ data, search, setSearch, canManage, onAdd, onEdit, onDelete }) {
+function StudentsPage({ data, search, setSearch, canManage, accessToken, saveStatus, onReloadData, onAdd, onEdit, onDelete }) {
   const normalized = search.trim().toLocaleLowerCase('pt-BR');
   const students = data.students.filter((student) => `${student.name} ${student.classroom}`.toLocaleLowerCase('pt-BR').includes(normalized)).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   const teamCount = (studentId) => data.teams.filter((team) => team.studentIds.includes(studentId)).length;
   return <>
     <PageHeading eyebrow="CADASTROS" title="Alunos" description="Mantenha os participantes organizados antes de formar os times.">{canManage && <button className="button button-primary" onClick={onAdd}><Plus size={17} />Novo aluno</button>}</PageHeading>
+    {canManage && <StudentRegistrationManager accessToken={accessToken} saveStatus={saveStatus} onReloadData={onReloadData} />}
     <div className="list-toolbar"><div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome ou turma..." /><kbd>⌘ K</kbd></div><span className="toolbar-count"><b>{data.students.length}</b> cadastrado(s)</span></div>
     <section className="panel data-panel">
       {students.length ? <div className="table-scroll"><table className="data-table"><thead><tr><th>ALUNO</th><th>TURMA / CURSO</th><th>MODALIDADES</th><th>EQUIPES</th>{canManage && <th className="action-cell">AÇÕES</th>}</tr></thead><tbody>{students.map((student) => <tr key={student.id}><td><div className="person-cell"><span className="avatar" style={{ '--avatar-color': avatarColor(student.name) }}>{initials(student.name)}</span><span className="person-name">{student.name}</span></div></td><td><span className="class-chip">{student.classroom}</span><small className="student-course">{student.course || 'Curso não informado'}</small></td><td><div className="inline-sports">{(student.modalities || []).map((modality) => <SportBadge key={modality} sport={modality} />)}</div></td><td>{teamCount(student.id) ? <span className="team-count">{teamCount(student.id)} equipe(s)</span> : <span className="muted">Sem equipe</span>}</td>{canManage && <td className="action-cell"><div className="row-actions"><button className="icon-button edit-icon" onClick={() => onEdit(student)} aria-label={`Editar ${student.name}`}><Pencil size={16} /></button><button className="icon-button delete-icon" onClick={() => onDelete(student)} aria-label={`Excluir ${student.name}`}><Trash2 size={16} /></button></div></td>}</tr>)}</tbody></table></div> : <EmptyState icon={UserRound} title={search ? 'Nenhum aluno encontrado' : 'Ainda não há alunos'} description={search ? 'Tente outro nome ou turma.' : 'Cadastre os estudantes que vão participar da interclasse.'} action={!search && canManage && <button className="button button-primary" onClick={onAdd}><Plus size={16} />Cadastrar primeiro aluno</button>} />}

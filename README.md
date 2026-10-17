@@ -29,7 +29,7 @@ O front-end usa somente valores públicos do Supabase. A função de administra�
 
 No projeto Supabase atual, as etapas abaixo já foram concluídas e verificadas. Para configurar **outro** projeto:
 
-1. No SQL Editor, execute `supabase/migrations/20261016113000_interclasse_access.sql`. A migração cria tabelas e políticas próprias da interclasse sem apagar tabelas ou registros existentes.
+1. No SQL Editor, execute `supabase/migrations/20261016113000_interclasse_access.sql` e, em seguida, `supabase/migrations/20261016150000_student_signups.sql`. As migrações criam tabelas e políticas próprias da interclasse sem apagar tabelas ou registros existentes.
 2. Em **Authentication → Users**, crie os três usuários com os endereços internos da tabela e uma senha forte para cada um. Marque-os como confirmados; os aliases `.invalid` não recebem e-mails.
 
    | Professor | Username no app | E-mail interno do Supabase |
@@ -39,12 +39,14 @@ No projeto Supabase atual, as etapas abaixo já foram concluídas e verificadas.
    | Luis Roberto | `luisroberto` | `luisroberto@accounts.interclasse.invalid` |
 
 3. Só depois de criar as três contas, execute `supabase/bootstrap-teachers.sql` **uma vez** para associar administrador, organizador e responsável pelos placares. O script aborta se uma conta estiver faltando e não altera papéis já associados.
-4. A tela do app não oferece cadastro público. Contas sem papel em `teacher_roles` não conseguem ler nem alterar dados protegidos por RLS.
+4. O cadastro de contas de professores continua restrito. A página pública de inscrição de alunos não dá acesso ao painel nem aos dados compartilhados; os registros ficam pendentes para revisão por administrador ou organizador.
+
+No projeto Supabase já usado pela interclasse, aplique somente a migração nova `supabase/migrations/20261016150000_student_signups.sql` no SQL Editor antes de publicar esta versão. Ela cria a tabela privada de inscrições pendentes e autoriza a API server-side a inserir alunos aprovados sem liberar escrita pública no estado do torneio.
 
 ## Publicar na Vercel
 
 1. Envie a pasta do projeto a um repositório GitHub e importe-o na Vercel usando o preset **Vite**.
-2. Use o comando `pnpm build` e o diretório de saída `dist`. A função serverless `api/users.js` é detectada pela Vercel.
+2. Use o comando `pnpm build` e o diretório de saída `dist`. As funções serverless `api/users.js` e `api/student-signups.js` são detectadas pela Vercel.
 3. Em **Project Settings → Environment Variables**, configure:
 
    | Variável | Onde | Valor |
@@ -56,7 +58,7 @@ No projeto Supabase atual, as etapas abaixo já foram concluídas e verificadas.
 
 4. Faça um novo deploy para carregar as variáveis.
 
-**Nunca** prefixe `SUPABASE_SERVICE_ROLE_KEY` com `VITE_`, nem a inclua no código, no GitHub, no ZIP ou em mensagens. A tela **Acessos** para criar usuários, trocar papéis, redefinir senhas e desativar contas depende da função serverless publicada e das duas variáveis server-side.
+**Nunca** prefixe `SUPABASE_SERVICE_ROLE_KEY` com `VITE_`, nem a inclua no código, no GitHub, no ZIP ou em mensagens. A tela **Acessos** e as rotas `/api/users` e `/api/student-signups` dependem da chave somente server-side. A senha dos professores é validada pelo Supabase Auth; nunca a escreva no front-end.
 
 ## Permissões
 
@@ -70,4 +72,4 @@ As permissões são aplicadas na interface **e** reforçadas por RLS e triggers 
 
 Alunos, equipes, sorteios e placares ficam compartilhados no Postgres Supabase. **Exportar JSON** cria uma cópia de segurança; somente o administrador pode importar um estado completo, substituindo os dados compartilhados. Backups da versão local anterior podem ser importados pelo administrador.
 
-O cadastro de estudantes é feito por formulário de um professor autorizado; **não há cadastro por QR Code nesta versão**. Armazene apenas dados necessários à organização (nome, turma, curso técnico e modalidades) e mantenha os backups JSON em local controlado.
+Os alunos podem acessar `/inscricao` pelo QR Code exibido na página **Alunos** do painel. O formulário solicita somente nome, turma, curso técnico opcional e modalidades; cada inscrição aguarda revisão de um professor antes de entrar no elenco. Depois de aprovada, a pessoa pode ser vinculada às equipes na tela **Equipes**. Mantenha os backups JSON em local controlado.

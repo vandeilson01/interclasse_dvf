@@ -8,6 +8,12 @@ A tela de login mostrará usuário e senha. Como o login de senha do Supabase us
 
 O navegador usará somente a URL pública e a chave publishable/anon do Supabase. RLS e uma trigger no banco limitarão as mudanças por papel, mesmo que alguém altere o JavaScript enviado ao navegador. A chave `service_role`, necessária ao endpoint administrativo de usuários, ficará exclusivamente em variável de ambiente de servidor na Vercel; nunca no bundle, no repositório ou no ZIP.
 
+## Inscrição pública de alunos por QR Code
+
+O app terá uma página pública independente em `/inscricao`, fora do `AuthGate` de professores. Ela coleta somente nome, turma, curso técnico opcional e uma ou ambas as modalidades (futsal/vôlei); não coleta telefone, e-mail ou senha. O texto informa que os dados servem para organizar a Interclasse. As inscrições ficam pendentes até revisão de um administrador ou organizador; somente inscrições aprovadas viram alunos do elenco, preservando o fluxo existente de montagem manual de equipes.
+
+O painel **Alunos** exibirá um QR Code e link público calculados a partir da origem atual. O formulário envia os campos para uma API server-side, que valida e grava somente em uma tabela de inscrições pendentes usando `SUPABASE_SERVICE_ROLE_KEY`. A tabela não concede leitura/gravação a `anon` ou `authenticated`; professores autorizados revisam/aprovam e a aprovação adiciona o aluno ao estado do torneio. A rota pública não oferece acesso ao painel nem aos dados existentes. O front-end nunca contém uma senha comum de professores; as contas continuam verificadas individualmente pelo Supabase Auth.
+
 ## Permissões aprovadas
 
 - **Andreson — administrador:** consulta e administra alunos, equipes, sorteios/chaves e placares; pode importar o backup JSON e gerenciar os acessos dos professores.
