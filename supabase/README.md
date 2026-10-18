@@ -2,21 +2,22 @@
 
 ## Projeto atual
 
-No projeto `interclasse` informado pelo titular, a migração foi aplicada com sucesso e verificada. O banco contém as tabelas `teacher_roles` e `interclasse_state`, RLS habilitado, três políticas de acesso, a trigger de autorização e a linha inicial de estado.
+O projeto Supabase `interclasse` já tem a tabela compartilhada `interclasse_state`. A migração original, as três contas Auth (Andreson, Leilson e Luis Roberto) e os papéis antigos foram criados em uma configuração anterior e continuam guardados; o app de senha única não os usa.
 
-As contas Auth abaixo foram criadas e seus papéis confirmados por consulta somente de leitura:
+A migração `migrations/20261018120000_shared_password_only_access.sql` **já foi executada e verificada** no projeto atual em 18/10/2026. A verificação confirmou RLS habilitada, zero policies e grants de tabela para `anon`/`authenticated`, e a função de serviço disponível para a API server-side. Não a execute novamente no projeto atual. Nenhum aluno, equipe, torneio, placar, conta ou tabela foi apagado.
 
-- Andreson (`andreson`) — `admin`.
-- Leilson (`leilson`) — `organizer`.
-- Luis Roberto (`luisroberto`) — `scorekeeper`.
+Depois, configure na Vercel apenas como variáveis server-side:
 
-**Não execute `bootstrap-teachers.sql` novamente nesse projeto.** As credenciais não ficam neste repositório; foram entregues ao titular separadamente.
+- `INTERCLASSE_SHARED_PASSWORD`: senha única, aleatória, com pelo menos 24 caracteres.
+- `SUPABASE_URL`: `https://dppbejaxouoqfnhutjmg.supabase.co`.
+- `SUPABASE_SERVICE_ROLE_KEY`: chave `service_role` do projeto.
 
-## Configurar outro projeto Supabase
+Nunca coloque `SUPABASE_SERVICE_ROLE_KEY` no navegador, em variáveis `VITE_`, no Git ou no ZIP.
 
-1. No SQL Editor, execute `migrations/20261016113000_interclasse_access.sql`. Ela cria tabelas, uma linha vazia de estado, RLS e triggers sem apagar tabelas ou registros existentes.
-2. Crie as contas Auth usando os endereços internos definidos em `bootstrap-teachers.sql`, marque-as como confirmadas e defina senhas temporárias fortes. Os endereços terminam em `.invalid` e não recebem e-mails.
-3. Execute `bootstrap-teachers.sql` uma vez após criar exatamente as três contas. O script aborta se alguma estiver faltando e não altera um papel existente.
-4. Configure as variáveis de ambiente conforme o README da raiz. `SUPABASE_SERVICE_ROLE_KEY` é somente server-side na Vercel; nunca use um prefixo `VITE_`.
+## Se for configurar um projeto novo
 
-Não há cadastro público no app. Uma conta sem papel em `teacher_roles` não consegue ler ou atualizar os dados, mesmo se existir em Supabase Auth.
+1. Execute `migrations/20261016113000_interclasse_access.sql`.
+2. Execute `migrations/20261018120000_shared_password_only_access.sql`.
+3. Configure as três variáveis server-side na Vercel.
+
+O app atual não precisa de contas no Supabase Auth nem do script `bootstrap-teachers.sql`. Os arquivos antigos são mantidos no repositório como registro da configuração anterior.

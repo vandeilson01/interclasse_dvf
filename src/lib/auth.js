@@ -1,36 +1,40 @@
-import { supabase } from './supabase.js';
-import { usernameToAuthEmail } from './usernames.js';
-
-export async function signInWithUsername(username, password) {
-  if (!supabase) throw new Error('O Supabase ainda não foi configurado.');
-  if (!String(password || '').trim()) throw new Error('Informe sua senha.');
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: usernameToAuthEmail(username),
-    password,
+async function requestSession(method, body) {
+  const response = await fetch('/api/session', {
+    method,
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
   });
-  if (error) throw error;
-  return data;
+  let result = {};
+  try { result = await response.json(); } catch { /* Resposta vazia ou não JSON. */ }
+  if (!response.ok) {
+    const message = response.status === 401 && method === 'POST'
+      ? 'Senha incorreta. Confira com a organização da interclasse.'
+      : result.error || 'Não foi possível verificar o acesso. Confira a configuração na Vercel.';
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
+  }
+  return result;
 }
 
-export async function getTeacherProfile(userId) {
-  if (!supabase) throw new Error('O Supabase ainda não foi configurado.');
-  const { data, error } = await supabase
-    .from('teacher_roles')
-    .select('user_id, username, display_name, role')
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
+export async function checkSession() {
+  try {
+    const result = await requestSession('GET');
+    return result.authenticated === true;
+  } catch (error) {
+    if (error.status === 401) return false;
+    throw error;
+  }
+}
+
+export async function signInWithSharedPassword(password) {
+  if (typeof password !== 'string' || !password) throw new Error('Informe a senha compartilhada.');
+  const result = await requestSession('POST', { password });
+  if (result.authenticated !== true) throw new Error('O servidor não confirmou o acesso. Publique as funções serverless da Vercel e tente novamente.');
 }
 
 export async function signOut() {
-  if (!supabase) return;
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
-}
-
-export async function changeOwnPassword(password) {
-  if (!supabase) throw new Error('O Supabase ainda não foi configurado.');
-  const { error } = await supabase.auth.updateUser({ password });
-  if (error) throw error;
+  await requestSession('DELETE');
 }

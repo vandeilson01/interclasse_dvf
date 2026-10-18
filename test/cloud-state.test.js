@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { drawTournament, recordResult } from '../src/lib/tournament.js';
 import { mergeCloudState, splitDataForCloud } from '../src/lib/cloudState.js';
-import { usernameToAuthEmail, validateUsername } from '../src/lib/usernames.js';
 
 function completeTournament(initial) {
   let current = initial;
@@ -20,12 +19,6 @@ function makeCompetition(teamCount) {
   const teams = Array.from({ length: teamCount }, (_, index) => ({ id: `team-${index + 1}`, name: `Equipe ${index + 1}` }));
   return drawTournament('futsal', teams);
 }
-
-test('mapeia usernames normalizados para aliases internos, sem e-mail pessoal', () => {
-  assert.equal(usernameToAuthEmail('  LuisRoberto '), 'luisroberto@accounts.interclasse.invalid');
-  assert.equal(validateUsername('ANDRESON'), 'andreson');
-  assert.throws(() => validateUsername('Luis Roberto'), /3 a 32 caracteres/);
-});
 
 test('separa sorteio e placares e recompõe vencedores, placares e vagas diretas', () => {
   const competition = completeTournament(makeCompetition(5));

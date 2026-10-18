@@ -3,15 +3,12 @@ import {
   Activity, ArrowRight, ArrowUpRight, CalendarDays, Check, CheckCircle2,
   ChevronDown, ChevronRight, CircleHelp, ClipboardList, Clock3, Download,
   FileJson2, Footprints, LayoutDashboard, MapPin, Medal, Menu,
-  KeyRound, LogOut, Pencil, Plus, Search, ShieldCheck, Shuffle, Trash2, Trophy, UserRound, Users,
+  LogOut, Pencil, Plus, Search, ShieldCheck, Shuffle, Trash2, Trophy, UserRound, Users,
   Volleyball, X, Zap, RefreshCw, Upload,
 } from 'lucide-react';
 import { makeBackup, normalizeData } from './lib/storage.js';
 import { drawTournament, recordResult } from './lib/tournament.js';
-import { useAccess } from './lib/accessContext.jsx';
-import { changeOwnPassword } from './lib/auth.js';
-import AccessManager from './components/AccessManager.jsx';
-import StudentRegistrationManager from './components/StudentRegistrationManager.jsx';
+import { SHARED_PERMISSIONS } from './lib/permissions.js';
 
 const SPORT_LABEL = { futsal: 'Futsal', volei: 'Vôlei' };
 const NAV_ITEMS = [
@@ -20,7 +17,6 @@ const NAV_ITEMS = [
   { id: 'equipes', label: 'Equipes', icon: Users },
   { id: 'chaves', label: 'Chaves', icon: Trophy },
   { id: 'jogos', label: 'Jogos e placares', icon: ClipboardList },
-  { id: 'acessos', label: 'Acessos', icon: ShieldCheck },
 ];
 const SPORT_COLORS = ['#12b7e8', '#7b62f4', '#f59e0b', '#f04c70', '#20b989', '#315cf3'];
 const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -30,8 +26,8 @@ function showRound(tournament, matchId) {
   return tournament?.rounds?.find((round) => round.matches.some((match) => match.id === matchId))?.label || '—';
 }
 
-function App({ data, setData, profile, session, saveStatus, saveError, onRetrySave, onReloadData, onLogout }) {
-  const access = useAccess();
+function App({ data, setData, saveStatus, saveError, onRetrySave, onReloadData, onLogout }) {
+  const access = SHARED_PERMISSIONS;
   const [page, setPage] = useState('inicio');
   const [sport, setSport] = useState('futsal');
   const [search, setSearch] = useState('');
@@ -39,7 +35,7 @@ function App({ data, setData, profile, session, saveStatus, saveError, onRetrySa
   const [toast, setToast] = useState('');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const importRef = useRef(null);
-  const visibleNavItems = NAV_ITEMS.filter((item) => item.id !== 'acessos' || access.isAdmin);
+  const visibleNavItems = NAV_ITEMS;
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -49,14 +45,14 @@ function App({ data, setData, profile, session, saveStatus, saveError, onRetrySa
 
   useEffect(() => {
     const handleNavigate = (event) => {
-      if (!NAV_ITEMS.some((item) => item.id === event.detail) || (event.detail === 'acessos' && !access.isAdmin)) return;
+      if (!NAV_ITEMS.some((item) => item.id === event.detail)) return;
       setPage(event.detail);
       setSearch('');
       setMobileNavOpen(false);
     };
     window.addEventListener('interclasse-navigate', handleNavigate);
     return () => window.removeEventListener('interclasse-navigate', handleNavigate);
-  }, [access.isAdmin]);
+  }, []);
 
   const teamsBySport = useMemo(() => data.teams.filter((team) => team.modality === sport), [data.teams, sport]);
   const activeCompetition = data.competitions?.[sport] || null;
@@ -169,7 +165,6 @@ function App({ data, setData, profile, session, saveStatus, saveError, onRetrySa
   }
 
   async function importJson(event) {
-    if (!access.isAdmin) return;
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
@@ -225,28 +220,26 @@ function App({ data, setData, profile, session, saveStatus, saveError, onRetrySa
               <span className="save-dot" />{saveStatus === 'saving' ? 'Sincronizando' : saveStatus === 'error' ? 'Falha ao salvar' : 'Sincronizado'}
             </div>
             <button className="button button-quiet button-export" onClick={exportJson}><Download size={16} /><span>Exportar JSON</span></button>
-            {access.isAdmin && <><button className="button button-primary button-import" onClick={() => importRef.current?.click()}><Upload size={16} /><span>Importar</span></button><input ref={importRef} type="file" accept=".json,application/json" className="visually-hidden" onChange={importJson} /></>}
-            <div className="account-tools"><div className="account-chip" title={access.roleLabel}><span className="account-avatar">{initials(profile.display_name)}</span><div className="account-copy"><strong>{profile.display_name}</strong><small>{access.roleLabel}</small></div></div><button className="logout-button" title="Alterar minha senha" aria-label="Alterar minha senha" onClick={() => setModal({ type: 'password' })}><KeyRound size={15} /></button><button className="logout-button" title="Sair" aria-label="Sair" onClick={onLogout}><LogOut size={15} /></button></div>
+            <button className="button button-primary button-import" onClick={() => importRef.current?.click()}><Upload size={16} /><span>Importar</span></button><input ref={importRef} type="file" accept=".json,application/json" className="visually-hidden" onChange={importJson} />
+            <div className="account-tools"><div className="account-chip" title="Senha compartilhada"><span className="account-avatar">EQ</span><div className="account-copy"><strong>Equipe responsável</strong><small>Acesso compartilhado</small></div></div><button className="logout-button" title="Sair" aria-label="Sair" onClick={onLogout}><LogOut size={15} /></button></div>
           </div>
         </header>
 
         {saveStatus === 'error' && <div className="sync-warning" role="alert"><span>{saveError || 'O último salvamento não foi confirmado.'}</span><button onClick={onRetrySave}>Tentar salvar novamente</button><button onClick={() => { if (window.confirm('Recarregar descarta alterações locais ainda não sincronizadas. Exporte um JSON antes, se quiser preservá-las. Continuar?')) onReloadData(); }}>Recarregar banco</button></div>}
         <section className="page-content">
           {page === 'inicio' && <><Dashboard data={data} onNavigate={goTo} /><ProjectCourseBand students={data.students} /></>}
-          {page === 'alunos' && <StudentsPage data={data} search={search} setSearch={setSearch} canManage={access.canManageRoster} accessToken={session.access_token} saveStatus={saveStatus} onReloadData={onReloadData} onAdd={() => setModal({ type: 'student' })} onEdit={(student) => setModal({ type: 'student', item: student })} onDelete={removeStudent} />}
+          {page === 'alunos' && <StudentsPage data={data} search={search} setSearch={setSearch} canManage={access.canManageRoster} onAdd={() => setModal({ type: 'student' })} onEdit={(student) => setModal({ type: 'student', item: student })} onDelete={removeStudent} />}
           {page === 'equipes' && <TeamsPage data={data} sport={sport} setSport={setSport} teams={teamsBySport} canManage={access.canManageRoster} onAdd={() => setModal({ type: 'team' })} onEdit={(team) => setModal({ type: 'team', item: team })} onDelete={removeTeam} />}
           {page === 'chaves' && <BracketPage data={data} sport={sport} setSport={setSport} teams={teamsBySport} competition={activeCompetition} canDraw={access.canManageDraw} canEditScores={access.canEditScores} canEnterPendingScores={access.canEnterPendingScores} onDraw={createDraw} onReset={resetDraw} onScore={(match) => setModal({ type: 'score', item: match })} />}
           {page === 'jogos' && <GamesPage data={data} sport={sport} setSport={setSport} competition={activeCompetition} canEditScores={access.canEditScores} canEnterPendingScores={access.canEnterPendingScores} onScore={(match) => setModal({ type: 'score', item: match })} />}
-          {page === 'acessos' && access.isAdmin && <AccessManager accessToken={session.access_token} currentUserId={profile.user_id} />}
         </section>
         <footer className="page-footer"><span>INTERCLASSE TÉCNICO {currentYear} <b>·</b> CENTRO EDUCA MAIS DOMINGOS VIEIRA FILHO</span><span>{saveStatus === 'error' ? 'O estado compartilhado precisa ser sincronizado.' : 'Dados compartilhados com a equipe pelo Supabase.'}</span></footer>
       </main>
 
-      {modal && <Modal title={modal.type === 'student' ? (modal.item ? 'Editar aluno' : 'Novo aluno') : modal.type === 'team' ? (modal.item ? 'Editar equipe' : 'Nova equipe') : modal.type === 'password' ? 'Alterar senha' : 'Lançar placar'} onClose={() => setModal(null)}>
+      {modal && <Modal title={modal.type === 'student' ? (modal.item ? 'Editar aluno' : 'Novo aluno') : modal.type === 'team' ? (modal.item ? 'Editar equipe' : 'Nova equipe') : 'Lançar placar'} onClose={() => setModal(null)}>
         {modal.type === 'student' && <StudentForm initial={modal.item} onSave={saveStudent} onCancel={() => setModal(null)} />}
         {modal.type === 'team' && <TeamForm initial={modal.item} students={data.students} currentSport={sport} onSave={saveTeam} onCancel={() => setModal(null)} />}
         {modal.type === 'score' && <ScoreForm match={modal.item} competition={activeCompetition} teams={data.teams} sport={sport} onSave={(values) => saveScore(modal.item, values)} onCancel={() => setModal(null)} />}
-        {modal.type === 'password' && <PasswordForm onSave={async (password) => { await changeOwnPassword(password); setModal(null); setToast('Sua senha foi atualizada.'); }} onCancel={() => setModal(null)} />}
       </Modal>}
       {toast && <div className="toast"><CheckCircle2 size={18} /><span>{toast}</span><button onClick={() => setToast('')} aria-label="Fechar aviso"><X size={15} /></button></div>}
     </div>
@@ -315,13 +308,12 @@ function SportTabs({ sport, setSport }) {
   return <div className="sport-tabs" role="tablist" aria-label="Modalidade"><button role="tab" aria-selected={sport === 'futsal'} className={sport === 'futsal' ? 'selected' : ''} onClick={() => setSport('futsal')}><Footprints size={15} />Futsal</button><button role="tab" aria-selected={sport === 'volei'} className={sport === 'volei' ? 'selected' : ''} onClick={() => setSport('volei')}><Volleyball size={15} />Vôlei</button></div>;
 }
 
-function StudentsPage({ data, search, setSearch, canManage, accessToken, saveStatus, onReloadData, onAdd, onEdit, onDelete }) {
+function StudentsPage({ data, search, setSearch, canManage, onAdd, onEdit, onDelete }) {
   const normalized = search.trim().toLocaleLowerCase('pt-BR');
   const students = data.students.filter((student) => `${student.name} ${student.classroom}`.toLocaleLowerCase('pt-BR').includes(normalized)).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   const teamCount = (studentId) => data.teams.filter((team) => team.studentIds.includes(studentId)).length;
   return <>
     <PageHeading eyebrow="CADASTROS" title="Alunos" description="Mantenha os participantes organizados antes de formar os times.">{canManage && <button className="button button-primary" onClick={onAdd}><Plus size={17} />Novo aluno</button>}</PageHeading>
-    {canManage && <StudentRegistrationManager accessToken={accessToken} saveStatus={saveStatus} onReloadData={onReloadData} />}
     <div className="list-toolbar"><div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome ou turma..." /><kbd>⌘ K</kbd></div><span className="toolbar-count"><b>{data.students.length}</b> cadastrado(s)</span></div>
     <section className="panel data-panel">
       {students.length ? <div className="table-scroll"><table className="data-table"><thead><tr><th>ALUNO</th><th>TURMA / CURSO</th><th>MODALIDADES</th><th>EQUIPES</th>{canManage && <th className="action-cell">AÇÕES</th>}</tr></thead><tbody>{students.map((student) => <tr key={student.id}><td><div className="person-cell"><span className="avatar" style={{ '--avatar-color': avatarColor(student.name) }}>{initials(student.name)}</span><span className="person-name">{student.name}</span></div></td><td><span className="class-chip">{student.classroom}</span><small className="student-course">{student.course || 'Curso não informado'}</small></td><td><div className="inline-sports">{(student.modalities || []).map((modality) => <SportBadge key={modality} sport={modality} />)}</div></td><td>{teamCount(student.id) ? <span className="team-count">{teamCount(student.id)} equipe(s)</span> : <span className="muted">Sem equipe</span>}</td>{canManage && <td className="action-cell"><div className="row-actions"><button className="icon-button edit-icon" onClick={() => onEdit(student)} aria-label={`Editar ${student.name}`}><Pencil size={16} /></button><button className="icon-button delete-icon" onClick={() => onDelete(student)} aria-label={`Excluir ${student.name}`}><Trash2 size={16} /></button></div></td>}</tr>)}</tbody></table></div> : <EmptyState icon={UserRound} title={search ? 'Nenhum aluno encontrado' : 'Ainda não há alunos'} description={search ? 'Tente outro nome ou turma.' : 'Cadastre os estudantes que vão participar da interclasse.'} action={!search && canManage && <button className="button button-primary" onClick={onAdd}><Plus size={16} />Cadastrar primeiro aluno</button>} />}
@@ -472,23 +464,6 @@ function ScoreForm({ match, competition, teams, sport, onSave, onCancel }) {
     onSave({ score1: first, score2: second, winnerId, decision });
   }
   return <form className="form-body score-form" onSubmit={submit}><div className="score-phase"><span className="phase-chip">{showRound(competition, match.id)}</span><span>JOGO {String(match.number).padStart(2, '0')}</span></div><div className="score-versus"><div className="score-team"><span className="score-team-logo" style={{ '--team-color': team1?.color }}>{initials(team1?.name)}</span><strong>{team1?.name}</strong></div><span className="score-vs">VS</span><div className="score-team"><span className="score-team-logo" style={{ '--team-color': team2?.color }}>{initials(team2?.name)}</span><strong>{team2?.name}</strong></div></div><div className="score-inputs"><label className="score-input"><span>{team1?.name}</span><input aria-label={`Placar de ${team1?.name}`} type="number" min="0" step="1" value={score1} onChange={(event) => setScore1(event.target.value)} /></label><span className="score-colon">×</span><label className="score-input"><span>{team2?.name}</span><input aria-label={`Placar de ${team2?.name}`} type="number" min="0" step="1" value={score2} onChange={(event) => setScore2(event.target.value)} /></label></div>{tied && <div className="decision-panel"><div className="decision-title">PLACAR EMPATADO <span>DEFINIR VENCEDOR</span></div><p>Selecione quem venceu a decisão de desempate.</p><div className="decision-options"><label className={winnerId === team1?.id ? 'decision-selected' : ''}><input type="radio" name="winner" checked={winnerId === team1?.id} onChange={() => setWinnerId(team1?.id || '')} /><span>{team1?.name}</span></label><label className={winnerId === team2?.id ? 'decision-selected' : ''}><input type="radio" name="winner" checked={winnerId === team2?.id} onChange={() => setWinnerId(team2?.id || '')} /><span>{team2?.name}</span></label></div><label className="form-label decision-method">Critério de desempate<input maxLength={35} value={decision} onChange={(event) => setDecision(event.target.value)} placeholder={sport === 'futsal' ? 'Ex.: Pênaltis' : 'Ex.: Ponto decisivo'} /></label></div>}{error && <div className="form-error">{error}</div>}<div className="score-info"><Zap size={15} />O vencedor avança automaticamente para a próxima fase.</div><div className="modal-actions"><button type="button" className="button button-quiet" onClick={onCancel}>Cancelar</button><button className="button button-primary" type="submit"><Check size={16} />Salvar placar</button></div></form>;
-}
-
-function PasswordForm({ onSave, onCancel }) {
-  const [password, setPassword] = useState('');
-  const [confirmation, setConfirmation] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  async function submit(event) {
-    event.preventDefault(); setError('');
-    if (password.length < 8) { setError('Use pelo menos 8 caracteres.'); return; }
-    if (password !== confirmation) { setError('As senhas não coincidem.'); return; }
-    setBusy(true);
-    try { await onSave(password); }
-    catch (saveError) { setError(saveError?.message || 'Não foi possível atualizar a senha.'); }
-    finally { setBusy(false); }
-  }
-  return <form className="form-body" onSubmit={submit}><p className="auth-card-description">Escolha uma senha forte e não a compartilhe. O administrador pode redefini-la se necessário.</p><label className="form-label">Nova senha<input autoFocus type="password" autoComplete="new-password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></label><label className="form-label">Confirme a nova senha<input type="password" autoComplete="new-password" minLength={8} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} required /></label>{error && <div className="form-error" role="alert">{error}</div>}<div className="modal-actions"><button type="button" className="button button-quiet" onClick={onCancel}>Cancelar</button><button className="button button-primary" type="submit" disabled={busy}><KeyRound size={15} />{busy ? 'Atualizando…' : 'Atualizar senha'}</button></div></form>;
 }
 
 export default App;

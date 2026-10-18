@@ -1,41 +1,32 @@
-# Plano — Acessos dos professores e dados compartilhados
+# Plano — Acesso único com dados compartilhados
 
-## Arquitetura
+## Arquitetura aprovada
 
-Manter o front-end React + Vite e a identidade visual azul-marinho/ciano já aprovada. A Vercel servirá o build estático e as funções do diretório `api/`. Supabase Auth fará o login; o Postgres do projeto `interclasse` guardará o estado compartilhado do torneio. Não haverá conta demo nem modo de desenvolvimento que ignore a autenticação.
+Manter o front-end React + Vite e a identidade visual azul-marinho/ciano já aprovada. A Vercel servirá o build estático e as funções serverless do diretório `api/`. O Supabase será usado somente como banco Postgres; o aplicativo não usará Supabase Auth para iniciar sessão nem consultará contas ou papéis de professores.
 
-A tela de login mostrará usuário e senha. Como o login de senha do Supabase usa e-mail ou telefone, o app converterá cada nome de usuário para um endereço interno reservado `@accounts.interclasse.invalid`; esse endereço não é exibido nem usado para enviar e-mail. Não haverá cadastro público ou recuperação de senha por e-mail fictício. O administrador poderá redefinir senhas no painel.
+O acesso usa uma única senha compartilhada, conferida exclusivamente na função server-side `api/session.js` contra a variável privada `INTERCLASSE_SHARED_PASSWORD`. Após validar, a função emite uma sessão assinada, temporária e em cookie `HttpOnly; Secure; SameSite=None`. A senha não será incluída no React, no repositório, no ZIP ou em respostas da API. A assinatura é verificada no servidor para cada acesso ao estado. A sessão expira em 12 horas; para trocar a senha, o titular atualiza a variável privada na Vercel e publica novamente.
 
-O navegador usará somente a URL pública e a chave publishable/anon do Supabase. RLS e uma trigger no banco limitarão as mudanças por papel, mesmo que alguém altere o JavaScript enviado ao navegador. A chave `service_role`, necessária ao endpoint administrativo de usuários, ficará exclusivamente em variável de ambiente de servidor na Vercel; nunca no bundle, no repositório ou no ZIP.
+O front-end não usa uma chave Supabase. `api/state.js` valida a sessão e consulta/atualiza a linha única `interclasse_state` usando `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY`, ambos somente no servidor. A API aceita gravações apenas da mesma origem. A migração `20261018120000_shared_password_only_access.sql` revoga leitura/gravação direta da tabela para `anon` e `authenticated`, mantendo todas as tabelas e contas e permitindo à API server-side operar no JSON.
 
-## Inscrição pública de alunos por QR Code
+Todos que souberem a senha única têm as mesmas permissões operacionais no app: consultar e alterar alunos, equipes, sorteios, placares, importar/exportar JSON. Não há identificação individual de quem fez cada alteração nem gestão de usuários/papéis dentro do app.
 
-O app terá uma página pública independente em `/inscricao`, fora do `AuthGate` de professores. Ela coleta somente nome, turma, curso técnico opcional e uma ou ambas as modalidades (futsal/vôlei); não coleta telefone, e-mail ou senha. O texto informa que os dados servem para organizar a Interclasse. As inscrições ficam pendentes até revisão de um administrador ou organizador; somente inscrições aprovadas viram alunos do elenco, preservando o fluxo existente de montagem manual de equipes.
+## Organização do código
 
-O painel **Alunos** exibirá um QR Code e link público calculados a partir da origem atual. O formulário envia os campos para uma API server-side, que valida e grava somente em uma tabela de inscrições pendentes usando `SUPABASE_SERVICE_ROLE_KEY`. A tabela não concede leitura/gravação a `anon` ou `authenticated`; professores autorizados revisam/aprovam e a aprovação adiciona o aluno ao estado do torneio. A rota pública não oferece acesso ao painel nem aos dados existentes. O front-end nunca contém uma senha comum de professores; as contas continuam verificadas individualmente pelo Supabase Auth.
+- `api/session.js`: confere a senha configurada, emite/valida/encerra sessão assinada em cookie seguro.
+- `api/state.js`: carrega e atualiza o estado JSON no Supabase após validar sessão e origem.
+- `server/session.js`: assinatura HMAC, comparação constante de senha, validação da origem e atributos do cookie.
+- `server/supabaseAdmin.js`: cliente Supabase server-side que consome a chave de serviço sem expô-la ao navegador.
+- `src/lib/auth.js`: chama os endpoints de sessão; não usa `signInWithPassword` nem `teacher_roles`.
+- `src/lib/cloudStore.js`: sincroniza a linha Supabase exclusivamente pelo endpoint `/api/state`, com controle de revisão otimista.
+- `src/components/AuthGate.jsx` e `LoginPage.jsx`: validam sessão ao iniciar e mostram somente um campo de senha.
+- `src/App.jsx` e `src/lib/permissions.js`: removem nomes/cargos de professores, o menu Acessos e verificações divergentes; conservam cadastro, mata-mata, placares e backup, com um único nível de acesso.
+- `supabase/migrations/`: preserva as migrações existentes e adiciona a política de acesso exclusivo por API.
+- `.env.example` e `README.md`: documentam senha compartilhada e variáveis da Vercel sem incluir valores secretos.
 
-## Permissões aprovadas
+## Estado Supabase existente
 
-- **Andreson — administrador:** consulta e administra alunos, equipes, sorteios/chaves e placares; pode importar o backup JSON e gerenciar os acessos dos professores.
-- **Leilson — organizador:** consulta/cadastra/edita/exclui alunos e equipes; consulta e lança/edita placares; não sorteia/refaz chaves nem administra usuários.
-- **Luis Roberto — placares:** consulta os dados do torneio e lança placares de jogos pendentes; não altera alunos/equipes, chaves ou placares já finalizados; não administra acessos.
+A migração original, as contas Andreson/Leilson/Luis Roberto e os respectivos papéis permanecem no Supabase e não serão apagados nem usados pelo app atual. A migração aditiva `20261018120000_shared_password_only_access.sql` foi executada no projeto Supabase `interclasse` em 18/10/2026 e retornou sucesso; a consulta de verificação confirmou RLS ativa, nenhuma policy/grant para `anon` ou `authenticated` nas tabelas do app e permissões de serviço para a API server-side. A linha de estado e as contas existentes foram preservadas.
 
-## Persistência e compatibilidade
+## Interface
 
-Persistir no banco as coleções de alunos/equipes, chaves sorteadas e resultados, mantendo os resultados separados da estrutura do sorteio para que os papéis de placar não possam alterar a chave. O app continuará exportando e importando backups JSON. Apenas o administrador poderá importar um estado completo. Backups antigos, com `competitions` embutindo placares, serão normalizados para o novo formato.
-
-## Estrutura principal
-
-- `src/lib/supabase.js`: cliente público Supabase e estado de configuração.
-- `src/lib/auth.js`: login por usuário, sessão, perfil/papel e logout.
-- `src/lib/cloudStore.js`: carregar/salvar estado compartilhado e converter compatibilidade JSON.
-- `src/App.jsx`: login, rótulo de papel, ações condicionadas e tela de gestão de acessos.
-- `api/users.js`: listar/criar/alterar papel/redefinir senha/desativar usuários; valida sessão e papel admin antes de usar `service_role`.
-- `supabase/migrations/`: tabelas, RLS, políticas e trigger de autorização reproduzíveis.
-- `.env.example` e `README.md`: variáveis públicas e secretas, configuração de Auth no Supabase e publicação na Vercel.
-
-## Estado e configuração
-
-A migração foi aplicada no projeto Supabase informado e verificada por leitura: as duas tabelas próprias, RLS, três políticas, trigger e linha inicial estão presentes. As contas Auth foram criadas e os papéis confirmados no banco: `andreson`/admin, `leilson`/organizer e `luisroberto`/scorekeeper. As senhas temporárias não são armazenadas no repositório.
-
-Para usar o site publicado, configurar `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` no front-end, e `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` exclusivamente no servidor da Vercel. O titular fará o deploy; o ZIP não contém a chave service role nem a chave pública preenchida.
+Preservar o design existente, a logo da escola e o painel de gestão. A tela de entrada substitui usuário e senha por um único campo de senha com ação de mostrar/ocultar. O indicador superior mostra sincronização do banco, sem avatar, nome de professor ou rótulo de cargo; o painel deixa de exibir a página Acessos e as ações são as mesmas para todas as pessoas autenticadas.

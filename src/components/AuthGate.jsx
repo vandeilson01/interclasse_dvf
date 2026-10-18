@@ -1,18 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AccessContext, permissionsFor } from '../lib/accessContext.jsx';
-import { getTeacherProfile, signOut } from '../lib/auth.js';
+import { checkSession, signOut } from '../lib/auth.js';
 import { emptyData } from '../lib/storage.js';
 import { loadCloudState, RevisionConflictError, saveCloudState } from '../lib/cloudStore.js';
-import { isSupabaseConfigured, supabase } from '../lib/supabase.js';
-import LoginPage, { LoadingPage, SupabaseSetupPage } from './LoginPage.jsx';
+import LoginPage, { LoadingPage, SetupPage } from './LoginPage.jsx';
 
 const jsonOf = (value) => JSON.stringify(value);
 
 export default function AuthGate({ children }) {
-  const [session, setSession] = useState(null);
+  const [authenticated, setAuthenticated] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
-  const [profile, setProfile] = useState(null);
-  const [profileLoading, setProfileLoading] = useState(false);
   const [dataReady, setDataReady] = useState(false);
   const [data, setData] = useState(emptyData);
   const [loginError, setLoginError] = useState('');
@@ -29,61 +25,23 @@ export default function AuthGate({ children }) {
   useEffect(() => { dataRef.current = data; }, [data]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) {
-      setSessionReady(true);
-      return undefined;
-    }
     let active = true;
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (!active) return;
-      setSession(nextSession);
-      if (!nextSession) {
-        setProfile(null);
-        setDataReady(false);
-        setData(emptyData());
-        revisionRef.current = null;
-        lastSavedJsonRef.current = '';
-      }
-      setLoginError('');
-    });
-    supabase.auth.getSession().then(({ data: sessionData, error }) => {
-      if (!active) return;
-      if (error) setLoginError('Não foi possível verificar a sessão. Entre novamente.');
-      setSession(sessionData?.session || null);
-      setSessionReady(true);
-    }).catch(() => {
-      if (!active) return;
-      setLoginError('Não foi possível verificar a sessão. Entre novamente.');
-      setSessionReady(true);
-    });
-    return () => {
-      active = false;
-      authListener.subscription.unsubscribe();
-    };
+    checkSession()
+      .then((valid) => { if (active) setAuthenticated(valid); })
+      .catch((error) => { if (active) setLoginError(error?.message || 'Não foi possível verificar a configuração do acesso.'); })
+      .finally(() => { if (active) setSessionReady(true); });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
-    if (!session) {
-      setProfile(null);
-      setProfileLoading(false);
-      setDataReady(false);
-      return undefined;
-    }
+    if (!sessionReady || !authenticated) return undefined;
     let active = true;
-    setProfileLoading(true);
-    setSystemError('');
     setDataReady(false);
+    setSystemError('');
     (async () => {
       try {
-        const teacher = await getTeacherProfile(session.user.id);
-        if (!teacher) {
-          await signOut();
-          if (active) setLoginError('Esta conta ainda não recebeu um papel na interclasse. Peça ao administrador para conferir seu acesso.');
-          return;
-        }
         const loaded = await loadCloudState();
         if (!active) return;
-        setProfile(teacher);
         dataRef.current = loaded.data;
         setData(loaded.data);
         revisionRef.current = loaded.revision;
@@ -92,16 +50,20 @@ export default function AuthGate({ children }) {
         setSaveError('');
         setDataReady(true);
       } catch (error) {
-        if (active) setSystemError(error?.message || 'Não foi possível conectar ao banco do torneio.');
-      } finally {
-        if (active) setProfileLoading(false);
+        if (!active) return;
+        if (error?.status === 401) {
+          setAuthenticated(false);
+          setLoginError('Sua sessão expirou. Entre novamente com a senha compartilhada.');
+        } else {
+          setSystemError(error?.message || 'Não foi possível conectar ao banco da interclasse.');
+        }
       }
     })();
     return () => { active = false; };
-  }, [session, loadSequence]);
+  }, [sessionReady, authenticated, loadSequence]);
 
   useEffect(() => {
-    if (!profile || !dataReady) return undefined;
+    if (!authenticated || !dataReady) return undefined;
     const snapshot = jsonOf(data);
     if (snapshot === lastSavedJsonRef.current) return undefined;
     let active = true;
@@ -120,10 +82,15 @@ export default function AuthGate({ children }) {
           }
         } catch (error) {
           if (!active) return;
+          if (error?.status === 401) {
+            setAuthenticated(false);
+            setLoginError('Sua sessão expirou. Entre novamente com a senha compartilhada.');
+            return;
+          }
           setSaveStatus('error');
           setSaveError(error instanceof RevisionConflictError
             ? error.message
-            : 'Não foi possível salvar no Supabase. Confira a conexão e tente novamente.');
+            : error?.message || 'Não foi possível salvar no Supabase. Confira a conexão e tente novamente.');
         }
       });
       saveQueueRef.current = queued;
@@ -132,10 +99,10 @@ export default function AuthGate({ children }) {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [data, profile, dataReady, retrySequence]);
+  }, [data, authenticated, dataReady, retrySequence]);
 
   const reloadData = useCallback(async () => {
-    if (!profile) return;
+    if (!authenticated) return;
     setSaveStatus('saving');
     try {
       const loaded = await loadCloudState();
@@ -145,14 +112,19 @@ export default function AuthGate({ children }) {
       lastSavedJsonRef.current = jsonOf(loaded.data);
       setSaveStatus('saved');
       setSaveError('');
-    } catch {
+    } catch (error) {
+      if (error?.status === 401) {
+        setAuthenticated(false);
+        setLoginError('Sua sessão expirou. Entre novamente com a senha compartilhada.');
+        return;
+      }
       setSaveStatus('error');
-      setSaveError('Não foi possível recarregar os dados compartilhados.');
+      setSaveError(error?.message || 'Não foi possível recarregar os dados compartilhados.');
     }
-  }, [profile]);
+  }, [authenticated]);
 
   useEffect(() => {
-    if (!profile || !dataReady) return undefined;
+    if (!authenticated || !dataReady) return undefined;
     let active = true;
     const refreshIfClean = async () => {
       if (document.visibilityState === 'hidden' || jsonOf(dataRef.current) !== lastSavedJsonRef.current) return;
@@ -166,8 +138,11 @@ export default function AuthGate({ children }) {
         lastSavedJsonRef.current = latestJson;
         setSaveStatus('saved');
         setSaveError('');
-      } catch {
-        // Falha temporária de leitura não descarta o estado local ainda não alterado.
+      } catch (error) {
+        if (active && error?.status === 401) {
+          setAuthenticated(false);
+          setLoginError('Sua sessão expirou. Entre novamente com a senha compartilhada.');
+        }
       }
     };
     const timer = window.setInterval(refreshIfClean, 20000);
@@ -177,40 +152,37 @@ export default function AuthGate({ children }) {
       window.clearInterval(timer);
       window.removeEventListener('focus', refreshIfClean);
     };
-  }, [profile, dataReady]);
+  }, [authenticated, dataReady]);
 
   async function handleLogout() {
-    try { await signOut(); } catch { setSession(null); }
+    try {
+      await signOut();
+    } catch (error) {
+      setSystemError(error?.message || 'Não foi possível encerrar a sessão.');
+      return;
+    }
+    revisionRef.current = null;
+    lastSavedJsonRef.current = '';
+    setData(emptyData());
+    setDataReady(false);
+    setAuthenticated(false);
+    setLoginError('');
+    setSystemError('');
   }
 
-  if (!isSupabaseConfigured) return <SupabaseSetupPage />;
   if (!sessionReady) return <LoadingPage />;
-  if (!session) return <LoginPage onLogin={setSession} error={loginError} />;
-  if (profileLoading) return <LoadingPage message="Validando seu papel e carregando a competição…" />;
-  if (systemError) return <main className="system-error-page"><section className="setup-card"><span className="auth-form-eyebrow">NÃO FOI POSSÍVEL CARREGAR</span><h1>O painel continua protegido.</h1><p>{systemError}</p><div className="system-error-actions"><button className="button button-primary" onClick={() => setLoadSequence((value) => value + 1)}>Tentar novamente</button><button className="button button-quiet" onClick={handleLogout}>Sair</button></div></section></main>;
-  if (!profile || !dataReady) return <LoadingPage message="Preparando os dados compartilhados…" />;
+  if (!authenticated && loginError.includes('INTERCLASSE_SHARED_PASSWORD')) return <SetupPage message={loginError} />;
+  if (!authenticated) return <LoginPage onLogin={() => { setLoginError(''); setAuthenticated(true); }} error={loginError} />;
+  if (systemError) return <main className="system-error-page"><section className="setup-card"><span className="auth-form-eyebrow">NÃO FOI POSSÍVEL CARREGAR</span><h1>O painel continua protegido.</h1><p>{systemError}</p><div className="system-error-actions"><button className="button button-primary" onClick={() => { setSystemError(''); setLoadSequence((value) => value + 1); }}>Tentar novamente</button><button className="button button-quiet" onClick={handleLogout}>Sair</button></div></section></main>;
+  if (!dataReady) return <LoadingPage message="Validando a sessão e carregando a competição…" />;
 
-  const access = {
-    ...permissionsFor(profile.role),
-    profile,
-    session,
+  return React.cloneElement(children, {
+    data,
+    setData,
     saveStatus,
     saveError,
     onRetrySave: () => setRetrySequence((value) => value + 1),
     onReloadData: reloadData,
     onLogout: handleLogout,
-  };
-  return <AccessContext.Provider value={access}>
-    {React.cloneElement(children, {
-      data,
-      setData,
-      profile,
-      session,
-      saveStatus,
-      saveError,
-      onRetrySave: access.onRetrySave,
-      onReloadData: reloadData,
-      onLogout: handleLogout,
-    })}
-  </AccessContext.Provider>;
+  });
 }
